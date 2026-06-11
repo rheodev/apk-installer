@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import {computed, nextTick, onBeforeUnmount, onMounted, ref} from 'vue'
+import {computed, nextTick, onBeforeUnmount, onMounted, ref, watch} from 'vue'
 import {GetAdbInfo, InstallApk, ListDevices, SelectApk} from '../wailsjs/go/main/App'
 import {EventsOff, EventsOn} from '../wailsjs/runtime/runtime'
 
@@ -26,6 +26,10 @@ type InstallLog = {
   time: string
 }
 
+type ThemeMode = 'light' | 'dark'
+
+const THEME_KEY = 'apk-install-theme'
+
 const adbInfo = ref<AdbInfo>({
   available: false,
   path: '',
@@ -41,12 +45,38 @@ const statusText = ref('准备就绪')
 const loadingDevices = ref(false)
 const installing = ref(false)
 const logPanel = ref<HTMLElement | null>(null)
+const theme = ref<ThemeMode>(resolveTheme())
 
 const onlineDevices = computed(() => devices.value.filter(device => device.state === 'device'))
 const selectedDevice = computed(() => devices.value.find(device => device.serial === selectedSerial.value))
+const themeLabel = computed(() => theme.value === 'dark' ? '深色' : '浅色')
+const themeIcon = computed(() => theme.value === 'dark' ? '☾' : '☀')
 const canInstall = computed(() => {
   return adbInfo.value.available && selectedDevice.value?.state === 'device' && apkPath.value !== '' && !installing.value
 })
+
+function resolveTheme(): ThemeMode {
+  if (typeof window === 'undefined') {
+    return 'dark'
+  }
+
+  const saved = window.localStorage.getItem(THEME_KEY)
+  if (saved === 'light' || saved === 'dark') {
+    return saved
+  }
+
+  return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
+}
+
+function applyTheme(mode: ThemeMode) {
+  if (typeof document === 'undefined') {
+    return
+  }
+
+  document.documentElement.dataset.theme = mode
+  document.documentElement.style.colorScheme = mode
+  window.localStorage.setItem(THEME_KEY, mode)
+}
 
 function deviceName(device: Device) {
   return device.model || device.device || device.product || device.serial
@@ -131,6 +161,12 @@ async function install() {
   }
 }
 
+function toggleTheme() {
+  theme.value = theme.value === 'dark' ? 'light' : 'dark'
+}
+
+watch(theme, mode => applyTheme(mode), {immediate: true})
+
 onMounted(async () => {
   EventsOn('adb-install-log', (entry: InstallLog) => {
     logs.value.push(entry)
@@ -155,13 +191,19 @@ onBeforeUnmount(() => {
 <template>
   <main class="shell">
     <section class="toolbar">
-      <div>
+      <div class="title-block">
         <p class="eyebrow">APK Installer</p>
         <h1>ADB 安装台</h1>
       </div>
-      <div class="status" :class="{ready: adbInfo.available}">
-        <span class="status-dot"></span>
-        <span>{{ statusText }}</span>
+      <div class="toolbar-actions">
+        <div class="status" :class="{ready: adbInfo.available}">
+          <span class="status-dot"></span>
+          <span>{{ statusText }}</span>
+        </div>
+        <button class="theme-toggle" type="button" :aria-label="`切换到${theme === 'dark' ? '浅色' : '深色'}模式`" @click="toggleTheme">
+          <span class="theme-toggle-icon">{{ themeIcon }}</span>
+          <span>{{ themeLabel }}</span>
+        </button>
       </div>
     </section>
 
@@ -211,7 +253,7 @@ onBeforeUnmount(() => {
           <span>APK 文件</span>
           <div class="file-input">
             <input v-model="apkPath" type="text" placeholder="选择或粘贴 .apk 路径" />
-            <button type="button" @click="chooseApk">浏览</button>
+            <button class="browse-button" type="button" @click="chooseApk">浏览</button>
           </div>
         </label>
 
