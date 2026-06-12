@@ -6,6 +6,9 @@
   "frontend:build": "pnpm run build",
   "frontend:dev:watcher": "pnpm run dev",
   "frontend:dev:serverUrl": "auto",
+  "postBuildHooks": {
+    "*/*": "sh ../../scripts/copy-platform-tools.sh ${bin}"
+  },
   "author": {
     "name": "Frank",
     "email": "38938035+rheodev@users.noreply.github.com"
