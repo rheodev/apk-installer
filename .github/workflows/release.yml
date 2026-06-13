@@ -1,0 +1,176 @@
+name: release
+
+# 推送版本 tag（如 v1.0.0）时构建 macOS + Windows 产物并发布 GitHub Release。
+# 同时支持 workflow_dispatch 手动触发（仅产 artifact，不发布 Release）。
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write   # release job 需要 write 权限创建 Release
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      # 下载官方 platform-tools，把内容平铺到 third_party/platform-tools/darwin/
+      # 注意：Google zip 解压后多一层 platform-tools/ 目录，
+      # 而 copy-platform-tools.sh 期望 third_party/platform-tools/darwin/adb（直接在 darwin/ 下）。
+      - name: Download platform-tools (darwin)
+        run: |
+          set -euo pipefail
+          curl -L -o /tmp/pt.zip https://dl.google.com/android/repository/platform-tools-latest-darwin.zip
+          mkdir -p third_party/platform-tools/darwin /tmp/pt-extract
+          unzip -q /tmp/pt.zip -d /tmp/pt-extract
+          # 平铺：把 platform-tools/* 移到 darwin/ 下，得到 darwin/adb、dar/fastboot 等
+          mv /tmp/pt-extract/platform-tools/* third_party/platform-tools/darwin/
+          chmod +x third_party/platform-tools/darwin/adb
+          echo "=== staged darwin platform-tools ==="
+          ls -la third_party/platform-tools/darwin/ | head
+
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
+
+      - name: Build (darwin/universal)
+        run: wails build -platform darwin/universal -clean
+
+      - name: Verify bundled adb
+        run: |
+          ls -la "build/bin/apk-install.app/Contents/Resources/platform-tools/adb" || \
+            { echo "ERROR: platform-tools 未被打包进 .app"; exit 1; }
+
+      - name: Package .app to zip
+        run: |
+          cd build/bin
+          ditto -c -k --keepParent apk-install.app "apk-install-${GITHUB_REF_NAME:-manual}-macos-universal.zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-build
+          path: build/bin/*.zip
+          if-no-files-found: error
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      # 2025 年 GitHub windows 镜像移除了 NSIS（actions/runner-images#11754），需显式安装。
+      - name: Install NSIS
+        uses: repolevedavaj/install-nsis@v1.0.3
+
+      # 下载官方 platform-tools，平铺到 third_party/platform-tools/windows/
+      - name: Download platform-tools (windows)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Invoke-WebRequest -Uri 'https://dl.google.com/android/repository/platform-tools-latest-windows.zip' -OutFile '$env:TEMP\pt.zip'
+          New-Item -ItemType Directory -Force -Path 'third_party\platform-tools\windows' | Out-Null
+          Expand-Archive -Path '$env:TEMP\pt.zip' -DestinationPath '$env:TEMP\pt-extract' -Force
+          # 平铺：platform-tools\* → third_party\platform-tools\windows\
+          Move-Item -Path '$env:TEMP\pt-extract\platform-tools\*' -Destination 'third_party\platform-tools\windows\' -Force
+          Write-Host '=== staged windows platform-tools ==='
+          Get-ChildItem 'third_party\platform-tools\windows\' | Select-Object Name, Length | Format-Table
+
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
+
+      - name: Build (windows/amd64 + NSIS)
+        run: wails build -platform windows/amd64 -nsis -clean
+
+      - name: Verify bundled adb in build/bin
+        shell: pwsh
+        run: |
+          if (-not (Test-Path 'build\bin\platform-tools\adb.exe')) {
+            Write-Error 'ERROR: platform-tools 未被复制到 build/bin/platform-tools'
+            exit 1
+          }
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-build
+          path: |
+            build/bin/*.exe
+          if-no-files-found: error
+
+  release:
+    needs: [build-macos, build-windows]
+    runs-on: ubuntu-latest
+    # 仅 tag 触发时才发布 Release；手动触发跳过此 job
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List release assets
+        run: |
+          echo "=== 将发布的产物 ==="
+          ls -laR artifacts/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            artifacts/*.zip
+            artifacts/*.exe
+          body: |
+            ## 安装说明
+
+            ### macOS
+            下载 `.zip` 解压后，把 `apk-install.app` 拖入「应用程序」文件夹。
+            首次打开若提示无法验证开发者，在「系统设置 → 隐私与安全性」点击「仍要打开」。
+
+            ### Windows
+            - `*-amd64-installer.exe`：NSIS 安装包，双击安装。
+            - `apk-install.exe`：绿色版，直接运行（需与 `platform-tools/` 同目录，安装包已自动处理）。
+
+            > ⚠️ 本产物未经代码签名 / 公证。
+
+            ---
+          fail_on_unmatched_files: true

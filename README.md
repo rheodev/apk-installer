@@ -24,6 +24,31 @@ wails dev
 wails build
 ```
 
+## CI 构建 / 发布
+
+仓库已配置 GitHub Actions（`.github/workflows/release.yml`），可在云端构建 macOS 与 Windows 产物，无需本机交叉编译环境。
+
+**触发方式**：推送形如 `v*` 的 tag，例如：
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+**流程**：
+1. `build-macos`：构建 `darwin/universal` 的 `.app`，打包成 zip
+2. `build-windows`：构建 `windows/amd64` 的 `.exe` 及 NSIS 安装包
+3. `release`：两个 job 成功后，自动创建 GitHub Release 并上传产物
+
+两个平台各自从 Google 官方源下载对应平台的 `platform-tools` 并打包进产物，因此无需在 git 中保存 adb 二进制。`platform-tools` 不会单独发布，已随 `.app` / 安装包分发。
+
+> 产物未经代码签名 / 公证：macOS 首次打开需在「系统设置 → 隐私与安全性」放行；Windows SmartScreen 可能提示未知发布者。
+
+也支持在 Actions 页面手动触发（`workflow_dispatch`），但手动触发只产 artifact、不发布 Release。
+
+> 提示：tag 名应与 `wails.json` 的 `info.productVersion` 保持一致，例如 `v1.0.0` 对应 `1.0.0`。
+
+
 如果希望打包内置 `adb`（避免依赖系统 PATH），构建前把对应平台的 platform-tools 放到 `third_party/platform-tools/`：
 
 ```text
