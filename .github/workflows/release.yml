@@ -105,9 +105,20 @@ jobs:
 
       # 2025 年 GitHub windows 镜像移除了 NSIS（actions/runner-images#11754），需显式安装。
       # 用 choco（runner 预装）安装官方 nsis 包，比第三方 action 更可靠。
+      # choco 装完后当前 shell 看不到新 PATH，必须写入 $GITHUB_PATH 让后续 step 能找到 makensis。
       - name: Install NSIS
         shell: pwsh
-        run: choco install nsis -y --no-progress
+        run: |
+          choco install nsis -y --no-progress
+          echo "C:\Program Files (x86)\NSIS" | Out-File -FilePath "$env:GITHUB_PATH" -Append
+      - name: Verify makensis available
+        shell: pwsh
+        run: |
+          if (-not (Get-Command makensis -ErrorAction SilentlyContinue)) {
+            Write-Error "makensis 仍不在 PATH，NSIS 安装可能失败"
+            exit 1
+          }
+          makensis /VERSION
 
       # 下载官方 platform-tools，只提取 adb.exe 及其依赖的 2 个 DLL（其余为冗余）。
       # 注意：PowerShell 单引号不展开变量，含 $env:TEMP 必须用双引号。
@@ -131,6 +142,18 @@ jobs:
 
       - name: Build (windows/amd64 + NSIS)
         run: wails build -platform windows/amd64 -nsis -clean
+
+      - name: List build outputs
+        shell: pwsh
+        run: |
+          Write-Host '=== build/bin 全部产物 ==='
+          Get-ChildItem 'build\bin\' -Recurse -File | Select-Object FullName, Length | Format-Table -AutoSize
+          $installer = Get-ChildItem 'build\bin\*-installer.exe' -ErrorAction SilentlyContinue
+          if (-not $installer) {
+            Write-Error 'NSIS 安装包未生成（*-installer.exe 缺失），检查 makensis 是否可用'
+            exit 1
+          }
+          Write-Host "NSIS 安装包: $($installer.Name)"
 
       - name: Verify bundled adb in build/bin
         shell: pwsh
