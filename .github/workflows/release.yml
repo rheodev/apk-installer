@@ -52,24 +52,35 @@ jobs:
       - name: Install Wails CLI
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
 
-      - name: Build (darwin/universal)
-        run: wails build -platform darwin/universal -clean
-
-      - name: Verify bundled adb
+      # 分两次独立构建 arm64 / amd64，避免 Wails v2 多目标同名覆盖问题（issue #2608）。
+      # 每次构建后立即改名打包，再清理 build/bin 为下一次构建腾出空间。
+      - name: Build darwin/arm64
         run: |
+          wails build -platform darwin/arm64 -clean
           ls -la "build/bin/apk-install.app/Contents/Resources/platform-tools/adb" || \
-            { echo "ERROR: platform-tools 未被打包进 .app"; exit 1; }
-
-      - name: Package .app to zip
-        run: |
+            { echo "ERROR: arm64 产物未打包 platform-tools"; exit 1; }
           cd build/bin
-          ditto -c -k --keepParent apk-install.app "apk-install-${GITHUB_REF_NAME:-manual}-macos-universal.zip"
+          ditto -c -k --keepParent apk-install.app "../../apk-install-${GITHUB_REF_NAME:-manual}-macos-arm64.zip"
+
+      - name: Build darwin/amd64
+        run: |
+          wails build -platform darwin/amd64 -clean
+          ls -la "build/bin/apk-install.app/Contents/Resources/platform-tools/adb" || \
+            { echo "ERROR: amd64 产物未打包 platform-tools"; exit 1; }
+          cd build/bin
+          ditto -c -k --keepParent apk-install.app "../../apk-install-${GITHUB_REF_NAME:-manual}-macos-amd64.zip"
+
+      - name: Verify build outputs
+        run: |
+          ls -la apk-install-*.zip
+          test -f apk-install-*-macos-arm64.zip || { echo "缺 arm64 zip"; exit 1; }
+          test -f apk-install-*-macos-amd64.zip || { echo "缺 amd64 zip"; exit 1; }
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: macos-build
-          path: build/bin/*.zip
+          path: apk-install-*-macos-*.zip
           if-no-files-found: error
 
   build-windows:
