@@ -1,25 +1,11 @@
 <script lang="ts" setup>
 import {computed, nextTick, onBeforeUnmount, onMounted, ref, watch} from 'vue'
-import {GetAdbInfo, InstallApk, ListDevices, SelectApk} from '../wailsjs/go/main/App'
+import {CancelApk, GetAdbInfo, InstallApk, ListDevices, SelectApk} from '../wailsjs/go/main/App'
+import {main} from '../wailsjs/go/models'
 import {EventsOff, EventsOn} from '../wailsjs/runtime/runtime'
 
-type AdbInfo = {
-  available: boolean
-  path: string
-  source: string
-  version: string
-  message: string
-}
-
-type Device = {
-  serial: string
-  state: string
-  model: string
-  product: string
-  device: string
-  transportId: string
-}
-
+type AdbInfo = main.AdbInfo
+type Device = main.Device
 type InstallLog = {
   level: string
   message: string
@@ -44,6 +30,7 @@ const logs = ref<InstallLog[]>([])
 const statusText = ref('准备就绪')
 const loadingDevices = ref(false)
 const installing = ref(false)
+const cancelling = ref(false)
 const logPanel = ref<HTMLElement | null>(null)
 const theme = ref<ThemeMode>(resolveTheme())
 
@@ -148,9 +135,15 @@ async function install() {
       deviceSerial: selectedSerial.value,
       apkPath: apkPath.value,
     })
-    statusText.value = result.success ? '安装成功' : '安装失败'
-    if (!result.success && result.error) {
-      addLog('error', result.error)
+    if (result.cancelled) {
+      statusText.value = '已取消'
+    } else if (result.success) {
+      statusText.value = '安装成功'
+    } else {
+      statusText.value = '安装失败'
+      if (result.error) {
+        addLog('error', result.error)
+      }
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
@@ -158,6 +151,17 @@ async function install() {
     addLog('error', message)
   } finally {
     installing.value = false
+  }
+}
+
+async function cancelInstall() {
+  cancelling.value = true
+  try {
+    await CancelApk()
+  } catch (error) {
+    addLog('error', error instanceof Error ? error.message : String(error))
+  } finally {
+    cancelling.value = false
   }
 }
 
@@ -257,9 +261,20 @@ onBeforeUnmount(() => {
           </div>
         </label>
 
-        <button class="install-button" type="button" :disabled="!canInstall" @click="install">
-          {{ installing ? '安装中...' : '安装 APK' }}
-        </button>
+        <div class="install-actions">
+          <button class="install-button" type="button" :disabled="!canInstall" @click="install">
+            {{ installing ? '安装中...' : '安装 APK' }}
+          </button>
+          <button
+            v-if="installing"
+            class="cancel-button"
+            type="button"
+            :disabled="cancelling"
+            @click="cancelInstall"
+          >
+            {{ cancelling ? '取消中...' : '取消' }}
+          </button>
+        </div>
       </div>
 
       <div class="panel log-panel-wrap">

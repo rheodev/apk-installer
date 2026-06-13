@@ -2,6 +2,7 @@ package main
 
 import (
 	"embed"
+	"log"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -31,6 +32,7 @@ func main() {
 	})
 
 	if err != nil {
-		println("Error:", err.Error())
+		// wails.Run 失败时窗口尚未建立，无法弹窗，只能记录到日志后退出。
+		log.Fatalf("启动失败: %v", err)
 	}
 }

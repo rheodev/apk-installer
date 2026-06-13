@@ -1,6 +1,18 @@
-build/bin
+# 构建产物
+build/bin/
+frontend/dist/
+/apk-install
+
+# 依赖
 node_modules
-frontend/dist
+
+# 第三方二进制（构建前手动放入，不入库）
+third_party/platform-tools/darwin/
+third_party/platform-tools/windows/
+
+# 编辑器 / 系统
+.DS_Store
 .cursor/
-
-
+.idea/
+.vscode/
+*.log

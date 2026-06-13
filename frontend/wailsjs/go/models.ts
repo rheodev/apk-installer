@@ -58,6 +58,7 @@ export namespace main {
 	}
 	export class InstallResult {
 	    success: boolean;
+	    cancelled: boolean;
 	    output: string;
 	    error: string;
 	
@@ -68,6 +69,7 @@ export namespace main {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.success = source["success"];
+	        this.cancelled = source["cancelled"];
 	        this.output = source["output"];
 	        this.error = source["error"];
 	    }

@@ -88,6 +88,13 @@ Section
 
     !insertmacro wails.files
 
+    # 打包内置 platform-tools，使其与 exe 同目录安装。
+    # copy-platform-tools.sh 在构建后会把 platform-tools 放到 build/bin/platform-tools，
+    # 这里用相对路径（相对 project.nsi 所在的 installer 目录）引用它。
+    SetOutPath "$INSTDIR\platform-tools"
+    File /nonfatal /r "..\..\bin\platform-tools\*.*"
+    SetOutPath $INSTDIR
+
     CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
     CreateShortCut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
 
