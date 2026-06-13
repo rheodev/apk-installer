@@ -34,20 +34,18 @@ jobs:
         with:
           version: 10
 
-      # 下载官方 platform-tools，把内容平铺到 third_party/platform-tools/darwin/
-      # 注意：Google zip 解压后多一层 platform-tools/ 目录，
-      # 而 copy-platform-tools.sh 期望 third_party/platform-tools/darwin/adb（直接在 darwin/ 下）。
+      # 下载官方 platform-tools，只提取 adb（应用唯一用到的文件，其余 fastboot/sqlite3 等是冗余）。
       - name: Download platform-tools (darwin)
         run: |
           set -euo pipefail
           curl -L -o /tmp/pt.zip https://dl.google.com/android/repository/platform-tools-latest-darwin.zip
-          mkdir -p third_party/platform-tools/darwin /tmp/pt-extract
+          mkdir -p /tmp/pt-extract
           unzip -q /tmp/pt.zip -d /tmp/pt-extract
-          # 平铺：把 platform-tools/* 移到 darwin/ 下，得到 darwin/adb、dar/fastboot 等
-          mv /tmp/pt-extract/platform-tools/* third_party/platform-tools/darwin/
+          mkdir -p third_party/platform-tools/darwin
+          cp /tmp/pt-extract/platform-tools/adb third_party/platform-tools/darwin/
           chmod +x third_party/platform-tools/darwin/adb
           echo "=== staged darwin platform-tools ==="
-          ls -la third_party/platform-tools/darwin/ | head
+          ls -la third_party/platform-tools/darwin/
 
       - name: Install Wails CLI
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
@@ -111,7 +109,7 @@ jobs:
         shell: pwsh
         run: choco install nsis -y --no-progress
 
-      # 下载官方 platform-tools，平铺到 third_party/platform-tools/windows/
+      # 下载官方 platform-tools，只提取 adb.exe 及其依赖的 2 个 DLL（其余为冗余）。
       # 注意：PowerShell 单引号不展开变量，含 $env:TEMP 必须用双引号。
       - name: Download platform-tools (windows)
         shell: pwsh
@@ -120,10 +118,11 @@ jobs:
           $zip = "$env:TEMP\pt.zip"
           $extract = "$env:TEMP\pt-extract"
           Invoke-WebRequest -Uri 'https://dl.google.com/android/repository/platform-tools-latest-windows.zip' -OutFile $zip
-          New-Item -ItemType Directory -Force -Path 'third_party\platform-tools\windows' | Out-Null
           Expand-Archive -Path $zip -DestinationPath $extract -Force
-          # 平铺：platform-tools\* → third_party\platform-tools\windows\
-          Move-Item -Path "$extract\platform-tools\*" -Destination 'third_party\platform-tools\windows\' -Force
+          New-Item -ItemType Directory -Force -Path 'third_party\platform-tools\windows' | Out-Null
+          Copy-Item "$extract\platform-tools\adb.exe"          'third_party\platform-tools\windows\'
+          Copy-Item "$extract\platform-tools\AdbWinApi.dll"    'third_party\platform-tools\windows\'
+          Copy-Item "$extract\platform-tools\AdbWinUsbApi.dll" 'third_party\platform-tools\windows\'
           Write-Host '=== staged windows platform-tools ==='
           Get-ChildItem 'third_party\platform-tools\windows\' | Select-Object Name, Length | Format-Table
 
