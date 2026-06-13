@@ -32,7 +32,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 10
 
       # 下载官方 platform-tools，把内容平铺到 third_party/platform-tools/darwin/
       # 注意：Google zip 解压后多一层 platform-tools/ 目录，
@@ -92,7 +92,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 10
 
       # 2025 年 GitHub windows 镜像移除了 NSIS（actions/runner-images#11754），需显式安装。
       # 用 choco（runner 预装）安装官方 nsis 包，比第三方 action 更可靠。
@@ -101,15 +101,18 @@ jobs:
         run: choco install nsis -y --no-progress
 
       # 下载官方 platform-tools，平铺到 third_party/platform-tools/windows/
+      # 注意：PowerShell 单引号不展开变量，含 $env:TEMP 必须用双引号。
       - name: Download platform-tools (windows)
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          Invoke-WebRequest -Uri 'https://dl.google.com/android/repository/platform-tools-latest-windows.zip' -OutFile '$env:TEMP\pt.zip'
+          $zip = "$env:TEMP\pt.zip"
+          $extract = "$env:TEMP\pt-extract"
+          Invoke-WebRequest -Uri 'https://dl.google.com/android/repository/platform-tools-latest-windows.zip' -OutFile $zip
           New-Item -ItemType Directory -Force -Path 'third_party\platform-tools\windows' | Out-Null
-          Expand-Archive -Path '$env:TEMP\pt.zip' -DestinationPath '$env:TEMP\pt-extract' -Force
+          Expand-Archive -Path $zip -DestinationPath $extract -Force
           # 平铺：platform-tools\* → third_party\platform-tools\windows\
-          Move-Item -Path '$env:TEMP\pt-extract\platform-tools\*' -Destination 'third_party\platform-tools\windows\' -Force
+          Move-Item -Path "$extract\platform-tools\*" -Destination 'third_party\platform-tools\windows\' -Force
           Write-Host '=== staged windows platform-tools ==='
           Get-ChildItem 'third_party\platform-tools\windows\' | Select-Object Name, Length | Format-Table
 
