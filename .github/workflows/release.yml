@@ -95,8 +95,10 @@ jobs:
           version: 9
 
       # 2025 年 GitHub windows 镜像移除了 NSIS（actions/runner-images#11754），需显式安装。
+      # 用 choco（runner 预装）安装官方 nsis 包，比第三方 action 更可靠。
       - name: Install NSIS
-        uses: repolevedavaj/install-nsis@v1.0.3
+        shell: pwsh
+        run: choco install nsis -y --no-progress
 
       # 下载官方 platform-tools，平铺到 third_party/platform-tools/windows/
       - name: Download platform-tools (windows)
