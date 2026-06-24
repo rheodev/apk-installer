@@ -1,12 +1,13 @@
 # apk-install
 
-一个基于 Wails + Vue + Go 的桌面小工具，用来通过 `adb` 给已连接的 Android 设备安装 APK。
+一个基于 Wails + Vue + Go 的桌面小工具，用来通过 `adb` 给已连接的 Android 设备安装 APK、XAPK、APKM、APKS。
 
 ## 功能
 
 - 列出当前连接的设备
-- 选择 APK 文件
+- 选择 APK、XAPK、APKM 或 APKS 文件
 - 选择目标设备并执行安装
+- 自动识别 `.apk` / `.xapk` / `.apkm` / `.apks`，压缩包格式会解包后安装内部 APK
 - 显示安装过程日志和失败原因
 - `adb` 优先使用内置路径，找不到时回退到系统 `PATH`
 
@@ -64,6 +65,8 @@ third_party/platform-tools/windows/AdbWinUsbApi.dll
 
 - 已安装 Android Platform Tools，或随应用内置 `adb`（见上「构建」）
 - 设备已开启 USB 调试并完成授权
+
+> XAPK/APKM/APKS 当前只安装包内 APK，不处理 OBB 等额外数据包。
 
 ## `adb` 约定
 

@@ -1,15 +1,18 @@
 package main
 
 import (
+	"archive/zip"
 	"bufio"
 	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -115,9 +118,12 @@ func (a *App) ListDevices() ([]Device, error) {
 
 func (a *App) SelectApk() (string, error) {
 	return wailsRuntime.OpenFileDialog(a.ctx, wailsRuntime.OpenDialogOptions{
-		Title: "选择 APK 文件",
+		Title: "选择安装包",
 		Filters: []wailsRuntime.FileFilter{
 			{DisplayName: "Android Package (*.apk)", Pattern: "*.apk"},
+			{DisplayName: "XAPK Package (*.xapk)", Pattern: "*.xapk"},
+			{DisplayName: "APKM Package (*.apkm)", Pattern: "*.apkm"},
+			{DisplayName: "APKS Package (*.apks)", Pattern: "*.apks"},
 		},
 	})
 }
@@ -127,23 +133,24 @@ func (a *App) SelectApk() (string, error) {
 // 重复调用会返回错误。
 func (a *App) InstallApk(req InstallRequest) (InstallResult, error) {
 	serial := strings.TrimSpace(req.DeviceSerial)
-	apkPath := strings.TrimSpace(req.ApkPath)
+	packagePath := strings.TrimSpace(req.ApkPath)
 
 	if serial == "" {
 		return InstallResult{}, errors.New("请选择一个设备")
 	}
-	if apkPath == "" {
-		return InstallResult{}, errors.New("请选择 APK 文件")
+	if packagePath == "" {
+		return InstallResult{}, errors.New("请选择安装包")
 	}
-	if !strings.EqualFold(filepath.Ext(apkPath), ".apk") {
-		return InstallResult{}, errors.New("请选择 .apk 文件")
+	ext := strings.ToLower(filepath.Ext(packagePath))
+	if !isSupportedPackageExt(ext) {
+		return InstallResult{}, errors.New("请选择 .apk、.xapk、.apkm 或 .apks 文件")
 	}
-	info, err := os.Stat(apkPath)
+	info, err := os.Stat(packagePath)
 	if err != nil {
-		return InstallResult{}, fmt.Errorf("APK 文件不可访问: %w", err)
+		return InstallResult{}, fmt.Errorf("安装文件不可访问: %w", err)
 	}
 	if info.IsDir() {
-		return InstallResult{}, errors.New("APK 路径不能是目录")
+		return InstallResult{}, errors.New("安装文件路径不能是目录")
 	}
 
 	adbPath, _, err := findAdb()
@@ -163,8 +170,16 @@ func (a *App) InstallApk(req InstallRequest) (InstallResult, error) {
 	timeoutCtx, timeoutCancel := context.WithTimeout(ctx, 15*time.Minute)
 	defer timeoutCancel()
 
-	a.emitLog("info", "开始安装: "+filepath.Base(apkPath))
-	cmd := exec.CommandContext(timeoutCtx, adbPath, "-s", serial, "install", "-r", apkPath)
+	a.emitLog("info", "开始安装: "+filepath.Base(packagePath))
+	installArgs, cleanup, err := a.buildInstallArgs(serial, packagePath, ext)
+	if cleanup != nil {
+		defer cleanup()
+	}
+	if err != nil {
+		return InstallResult{}, err
+	}
+
+	cmd := exec.CommandContext(timeoutCtx, adbPath, installArgs...)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		cancel()
@@ -220,6 +235,126 @@ func (a *App) InstallApk(req InstallRequest) (InstallResult, error) {
 
 	a.emitLog("success", "安装完成")
 	return InstallResult{Success: true, Output: output.String()}, nil
+}
+
+func (a *App) buildInstallArgs(serial string, packagePath string, ext string) ([]string, func(), error) {
+	if ext == ".apk" {
+		return []string{"-s", serial, "install", "-r", packagePath}, nil, nil
+	}
+
+	format := strings.TrimPrefix(strings.ToUpper(ext), ".")
+	a.emitLog("info", "正在解包 "+format)
+	tempDir, err := os.MkdirTemp("", "apk-install-bundle-*")
+	if err != nil {
+		return nil, nil, fmt.Errorf("创建临时目录失败: %w", err)
+	}
+
+	cleanup := func() {
+		if err := os.RemoveAll(tempDir); err != nil {
+			a.emitLog("error", "清理临时文件失败: "+err.Error())
+		}
+	}
+
+	apkFiles, err := extractApksFromBundle(packagePath, tempDir, format)
+	if err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+	if len(apkFiles) == 0 {
+		cleanup()
+		return nil, nil, fmt.Errorf("%s 中未找到 APK 文件", format)
+	}
+
+	sortApkFiles(apkFiles)
+	if len(apkFiles) == 1 {
+		a.emitLog("info", "发现 1 个 APK，使用 install 安装")
+		return []string{"-s", serial, "install", "-r", apkFiles[0]}, cleanup, nil
+	}
+
+	a.emitLog("info", fmt.Sprintf("发现 %d 个 APK，使用 install-multiple 安装", len(apkFiles)))
+	args := []string{"-s", serial, "install-multiple", "-r"}
+	args = append(args, apkFiles...)
+	return args, cleanup, nil
+}
+
+func isSupportedPackageExt(ext string) bool {
+	switch ext {
+	case ".apk", ".xapk", ".apkm", ".apks":
+		return true
+	default:
+		return false
+	}
+}
+
+func extractApksFromBundle(bundlePath string, targetDir string, format string) ([]string, error) {
+	reader, err := zip.OpenReader(bundlePath)
+	if err != nil {
+		return nil, fmt.Errorf("%s 解包失败: %w", format, err)
+	}
+	defer reader.Close()
+
+	apkFiles := make([]string, 0)
+	for _, file := range reader.File {
+		if file.FileInfo().IsDir() || !strings.EqualFold(filepath.Ext(file.Name), ".apk") {
+			continue
+		}
+
+		targetPath, err := safeZipTargetPath(targetDir, file.Name)
+		if err != nil {
+			return nil, err
+		}
+		if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
+			return nil, fmt.Errorf("创建解包目录失败: %w", err)
+		}
+		if err := extractZipFile(file, targetPath); err != nil {
+			return nil, fmt.Errorf("%s 解包失败: %w", format, err)
+		}
+		apkFiles = append(apkFiles, targetPath)
+	}
+
+	return apkFiles, nil
+}
+
+func safeZipTargetPath(baseDir string, entryName string) (string, error) {
+	targetPath := filepath.Join(baseDir, filepath.Clean(entryName))
+	cleanBase := filepath.Clean(baseDir) + string(os.PathSeparator)
+	if !strings.HasPrefix(targetPath, cleanBase) {
+		return "", fmt.Errorf("安装包包含非法路径: %s", entryName)
+	}
+	return targetPath, nil
+}
+
+func extractZipFile(file *zip.File, targetPath string) error {
+	source, err := file.Open()
+	if err != nil {
+		return fmt.Errorf("读取包内文件失败: %w", err)
+	}
+	defer source.Close()
+
+	target, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	if err != nil {
+		return fmt.Errorf("写入临时 APK 失败: %w", err)
+	}
+	defer target.Close()
+
+	if _, err := io.Copy(target, source); err != nil {
+		return fmt.Errorf("写入临时 APK 失败: %w", err)
+	}
+	return nil
+}
+
+func sortApkFiles(apkFiles []string) {
+	sort.Slice(apkFiles, func(i int, j int) bool {
+		left := strings.ToLower(filepath.Base(apkFiles[i]))
+		right := strings.ToLower(filepath.Base(apkFiles[j]))
+		if left == "base.apk" {
+			return true
+		}
+		if right == "base.apk" {
+			return false
+		}
+		return left < right
+	})
 }
 
 // CancelApk 取消正在进行的安装。没有进行中的安装时返回 false。

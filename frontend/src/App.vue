@@ -114,7 +114,7 @@ async function chooseApk() {
     const path = await SelectApk()
     if (path) {
       apkPath.value = path
-      statusText.value = 'APK 已选择'
+      statusText.value = '安装文件已选择'
     }
   } catch (error) {
     addLog('error', error instanceof Error ? error.message : String(error))
@@ -254,16 +254,16 @@ onBeforeUnmount(() => {
         </div>
 
         <label class="field">
-          <span>APK 文件</span>
+          <span>安装包</span>
           <div class="file-input">
-            <input v-model="apkPath" type="text" placeholder="选择或粘贴 .apk 路径" />
+            <input v-model="apkPath" type="text" placeholder="选择或粘贴 .apk / .xapk / .apkm / .apks 路径" />
             <button class="browse-button" type="button" @click="chooseApk">浏览</button>
           </div>
         </label>
 
         <div class="install-actions">
           <button class="install-button" type="button" :disabled="!canInstall" @click="install">
-            {{ installing ? '安装中...' : '安装 APK' }}
+            {{ installing ? '安装中...' : '安装包' }}
           </button>
           <button
             v-if="installing"
