@@ -18,7 +18,7 @@ func main() {
 
 	// Create application with options
 	err := wails.Run(&options.App{
-		Title:  "apk安装工具",
+		Title:  "APK 安装器",
 		Width:  800,
 		Height: 600,
 		AssetServer: &assetserver.Options{

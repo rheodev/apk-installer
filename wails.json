@@ -1,17 +1,17 @@
 {
   "$schema": "https://wails.io/schemas/config.v2.json",
-  "name": "apk-install",
-  "outputfilename": "apk-install",
+  "name": "APK 安装器",
+  "outputfilename": "APK 安装器",
   "frontend:install": "pnpm install",
   "frontend:build": "pnpm run build",
   "frontend:dev:watcher": "pnpm run dev",
   "frontend:dev:serverUrl": "auto",
   "postBuildHooks": {
-    "*/*": "sh ../../scripts/copy-platform-tools.sh ${bin}"
+    "*/*": "sh ../../scripts/copy-platform-tools.sh \"${bin}\""
   },
   "info": {
     "companyName": "Frank",
-    "productName": "APK 安装工具",
+    "productName": "APK 安装器",
     "productVersion": "1.0.3",
     "copyright": "Copyright © 2026 Frank",
     "comments": "基于 ADB 的 APK 安装桌面工具"

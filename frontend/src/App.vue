@@ -196,7 +196,7 @@ onBeforeUnmount(() => {
   <main class="shell">
     <section class="toolbar">
       <div class="title-block">
-        <p class="eyebrow">APK Installer</p>
+        <p class="eyebrow">APK 安装器</p>
         <h1>ADB 安装台</h1>
       </div>
       <div class="toolbar-actions">

@@ -13,5 +13,5 @@ third_party/platform-tools/windows/AdbWinUsbApi.dll
 
 The post-build hook copies the current platform directory into the packaged app:
 
-- macOS: `apk-install.app/Contents/Resources/platform-tools/`
+- macOS: `APK 安装器.app/Contents/Resources/platform-tools/`
 - Windows: `build/bin/platform-tools/`
