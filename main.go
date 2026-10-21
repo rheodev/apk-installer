@@ -21,6 +21,10 @@ func main() {
 		Title:  "APK 安装器",
 		Width:  800,
 		Height: 600,
+		MinWidth: 800,
+		MinHeight: 600,
+		MaxWidth: 800,
+		MaxHeight: 600,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
