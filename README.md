@@ -2,6 +2,10 @@
 
 一个基于 Wails + Vue + Go 的桌面小工具，用来通过 `adb` 给已连接的 Android 设备安装 APK、XAPK、APKM、APKS。
 
+## 界面预览
+
+![APK 安装器浅色主题界面](docs/images/app-preview.png)
+
 ## 功能
 
 - 列出当前连接的设备
