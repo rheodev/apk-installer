@@ -18,15 +18,18 @@ func main() {
 
 	// Create application with options
 	err := wails.Run(&options.App{
-		Title:  "APK 安装器",
-		Width:  800,
-		Height: 600,
-		MinWidth: 800,
+		Title:     "APK 安装器",
+		Width:     800,
+		Height:    600,
+		MinWidth:  800,
 		MinHeight: 600,
-		MaxWidth: 800,
+		MaxWidth:  800,
 		MaxHeight: 600,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
+		},
+		DragAndDrop: &options.DragAndDrop{
+			EnableFileDrop: true,
 		},
 		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1},
 		OnStartup:        app.startup,
