@@ -39,7 +39,6 @@ const theme = ref<ThemeMode>(resolveTheme())
 const onlineDevices = computed(() => devices.value.filter(device => device.state === 'device'))
 const selectedDevice = computed(() => devices.value.find(device => device.serial === selectedSerial.value))
 const themeLabel = computed(() => theme.value === 'dark' ? '深色' : '浅色')
-const themeIcon = computed(() => theme.value === 'dark' ? '☾' : '☀')
 const fileName = computed(() => apkPath.value.split(/[\\/]/).pop() || '')
 const canInstall = computed(() => {
   return adbInfo.value.available && selectedDevice.value?.state === 'device' && apkPath.value !== '' && !installing.value
@@ -242,22 +241,25 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <main class="shell" :class="{dragging}" @dragenter.prevent="dragging = true" @dragover.prevent @dragleave="dragging = false" @drop.prevent="dragging = false">
+  <main class="shell" :class="{dragging}" @click="deviceMenuOpen = false" @keydown.esc="deviceMenuOpen = false" @dragenter.prevent="dragging = true" @dragover.prevent @dragleave="dragging = false" @drop.prevent="dragging = false">
     <section class="titlebar">
       <div class="brand">
-        <span class="brand-mark" aria-hidden="true"></span>
+        <span class="brand-mark" aria-hidden="true"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z" /><path d="m4 7.5 8 4.5 8-4.5M12 12v9M8 5.3l8 4.5" /></svg></span>
         <strong>APK 安装器</strong>
         <span class="adb-version" :class="{ok: adbInfo.available}" :title="adbInfo.available ? adbInfo.version || 'adb 可用' : adbInfo.message">
           {{ adbLabel }}
         </span>
       </div>
       <div class="titlebar-actions">
-        <div class="status" :class="{ready: adbInfo.available && onlineDevices.length > 0}">
+        <div class="status" role="status" :title="statusText" :class="{ready: adbInfo.available && onlineDevices.length > 0}">
           <span class="status-dot"></span>
           <span>{{ statusText }}</span>
         </div>
         <button class="theme-toggle" type="button" :aria-label="`切换到${theme === 'dark' ? '浅色' : '深色'}模式`" @click="toggleTheme">
-          <span class="theme-toggle-icon">{{ themeIcon }}</span>
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path v-if="theme === 'dark'" d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z" />
+            <g v-else><circle cx="12" cy="12" r="4" /><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5" /></g>
+          </svg>
           <span>{{ themeLabel }}</span>
         </button>
       </div>
@@ -265,7 +267,7 @@ onBeforeUnmount(() => {
 
     <section class="stage">
       <div v-if="apkPath" class="file-card">
-        <div class="file-icon" aria-hidden="true"></div>
+        <div class="file-icon" aria-hidden="true"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6v18h12V7l-4-4Z" /><path d="M14 3v5h4M9 13h6m-6 4h4" /></svg></div>
         <div class="file-meta">
           <strong class="file-name" :title="apkPath">{{ fileName }}</strong>
           <small class="file-path" :title="apkPath">{{ apkPath }}</small>
@@ -274,13 +276,13 @@ onBeforeUnmount(() => {
       </div>
 
       <div class="drop-zone" :class="{armed: !apkPath}" role="button" tabindex="0" aria-label="选择安装包" @click="chooseApk" @keydown.enter.prevent="chooseApk" @keydown.space.prevent="chooseApk">
-        <div class="drop-glyph" aria-hidden="true"></div>
+        <div class="drop-glyph" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21V5m-6 6 6-6 6 6M6 20v6a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1v-6" /></svg></div>
         <p class="drop-title">拖入安装包</p>
         <p class="drop-hint">或点击选择 · 支持 .apk / .xapk / .apkm / .apks</p>
       </div>
 
       <div class="action-row">
-        <div class="device-select" :class="{open: deviceMenuOpen, empty: onlineDevices.length === 0}">
+        <div class="device-select" @click.stop :class="{open: deviceMenuOpen, empty: onlineDevices.length === 0}">
           <button
             class="device-select-button"
             type="button"
@@ -297,10 +299,10 @@ onBeforeUnmount(() => {
               </template>
               <template v-else>{{ devices.length === 0 ? '未发现设备' : '选择设备' }}</template>
             </span>
-            <span class="chevron" aria-hidden="true">⌄</span>
+            <svg class="icon chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 10 4 4 4-4" /></svg>
           </button>
-          <button v-if="devices.length > 0" class="ghost-button square" type="button" :disabled="loadingDevices || !adbInfo.available" :aria-label="loadingDevices ? '刷新中' : '刷新设备列表'" @click="refreshDevices">
-            {{ loadingDevices ? '···' : '⟳' }}
+          <button class="ghost-button square" type="button" :disabled="loadingDevices || !adbInfo.available" :aria-label="loadingDevices ? '刷新中' : '刷新设备列表'" @click="refreshDevices">
+            <svg class="icon" :class="{spinning: loadingDevices}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5" /><path d="M6.1 7a7 7 0 0 1 11.5-1L20 9M4 15l2.4 3A7 7 0 0 0 17.9 17" /></svg>
           </button>
           <div v-if="deviceMenuOpen" class="device-menu" role="listbox" aria-label="设备列表">
             <button
@@ -337,7 +339,7 @@ onBeforeUnmount(() => {
         <header class="dock-head">
           <span class="dock-title">日志</span>
           <span class="dock-count">{{ logs.length }} 条</span>
-          <button class="dock-close" type="button" aria-label="折叠日志" @click="logs = []">×</button>
+          <button class="dock-close" type="button" aria-label="清空日志" @click="logs = []"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="m7 7 10 10M7 17 17 7" /></svg></button>
         </header>
         <div ref="logPanel" class="dock-body">
           <div v-for="(log, index) in logs" :key="index" class="log-line" :class="log.level">
